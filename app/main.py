@@ -180,6 +180,35 @@ async def history(limit: int = Query(240, ge=10, le=1000)) -> Dict[str, Any]:
     }
 
 
+CANDLE_INTERVALS = {"1m", "5m", "15m", "1h", "4h", "1d"}
+CANDLE_CACHE_SECONDS = 30
+_candle_cache: Dict[str, tuple] = {}
+
+
+@app.get("/api/candles", tags=["data"])
+async def candles(interval: str = Query("1h"),
+                  limit: int = Query(500, ge=10, le=1000)) -> Dict[str, Any]:
+    """Candles at any supported interval, fetched on demand and cached for 30 s."""
+    import asyncio
+
+    if interval not in CANDLE_INTERVALS:
+        raise HTTPException(status_code=422,
+                            detail=f"interval must be one of {sorted(CANDLE_INTERVALS)}")
+    cache_key = f"{interval}:{limit}"
+    cached = _candle_cache.get(cache_key)
+    if cached and time.time() - cached[0] < CANDLE_CACHE_SECONDS:
+        return {"available": True, "interval": interval, "count": len(cached[1]),
+                "bars": cached[1], "cached": True}
+
+    frame = await asyncio.to_thread(get_client().get_klines, interval, limit)
+    frame["open_time"] = frame["open_time"].astype(str)
+    frame["close_time"] = frame["close_time"].astype(str)
+    records = frame.to_dict(orient="records")
+    _candle_cache[cache_key] = (time.time(), records)
+    return {"available": True, "interval": interval, "count": len(records),
+            "bars": records, "cached": False}
+
+
 @app.get("/api/ticks", tags=["data"])
 async def ticks() -> Dict[str, Any]:
     """Every 10-second observation of this session (the real-time stream)."""

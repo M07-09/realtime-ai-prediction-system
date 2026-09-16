@@ -195,6 +195,12 @@ def render_sidebar() -> None:
 # --------------------------------------------------------------------------
 # Live tab (auto-refreshing fragment)
 # --------------------------------------------------------------------------
+# Chart range -> (candle interval, number of candles). Longer ranges use bigger
+# candles, the way exchanges do, so a year is 365 candles rather than 525,600.
+TIMEFRAMES = {"1H": ("1m", 60), "4H": ("1m", 240), "1D": ("5m", 288),
+              "1W": ("1h", 168), "1M": ("4h", 180), "1Y": ("1d", 365)}
+
+
 @st.fragment(run_every=POLL_INTERVAL_SECONDS)
 def live_section() -> None:
     result = api_get("/api/status", {"history_limit": 240})
@@ -246,11 +252,22 @@ def live_section() -> None:
 
     st.write("")
     history = s.get("history", [])
-    if history:
-        st.plotly_chart(candlestick_chart(history), width="stretch", key=f"px_{key}",
-                        config={"displayModeBar": False, "scrollZoom": True})
+    frame = st.segmented_control("Timeframe", list(TIMEFRAMES), default="4H", required=True,
+                                 key="timeframe", label_visibility="collapsed")
+    interval, limit = TIMEFRAMES[frame]
+    if interval == "1m":                      # the live buffer already holds these
+        bars, problem = history[-limit:], ""
     else:
-        st.info("Waiting for the first candles ...")
+        r = api_get("/api/candles", {"interval": interval, "limit": limit}, timeout=20)
+        bars = r["data"].get("bars", []) if r["ok"] else []
+        problem = "" if r["ok"] else r["message"]
+    if bars:
+        st.plotly_chart(candlestick_chart(bars), width="stretch", key=f"px_{frame}_{key}",
+                        config={"displayModeBar": False, "scrollZoom": True})
+        st.markdown(f'<div class="note">{len(bars)} candles · {interval} each</div>',
+                    unsafe_allow_html=True)
+    else:
+        st.info(problem or "Waiting for the first candles ...")
 
     left, right = st.columns([3, 2], gap="large")
     resolved, ev = s.get("resolved_predictions", []), s.get("live_evaluation", {})

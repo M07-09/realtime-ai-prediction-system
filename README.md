@@ -279,7 +279,8 @@ data comes from, and how the model works.
 A dark trading-terminal layout with four tabs:
 
 - **Live** — price, forecast, 24h change, trend and data freshness as cards; a plain
-  candlestick-and-volume chart; forecast-vs-reality and error charts for the running session;
+  candlestick-and-volume chart with 1H / 4H / 1D / 1W / 1M / 1Y ranges (longer ranges use bigger
+  candles, fetched on demand); forecast-vs-reality and error charts for the running session;
   live scoring; window statistics; and the raw candles received from the API.
 - **Model** — the five offline metrics, the naive baseline, the model configuration and every
   training plot.
@@ -298,7 +299,8 @@ Interactive docs at **http://127.0.0.1:8000/docs**.
 | GET | `/` | Service description |
 | GET | `/health` | Health of API, collector, model, chatbot |
 | GET | `/api/live` | Latest observation |
-| GET | `/api/history?limit=` | Rolling candle window |
+| GET | `/api/history?limit=` | Rolling 1-minute candle window |
+| GET | `/api/candles?interval=&limit=` | Candles at any interval, on demand, cached 30 s |
 | GET | `/api/ticks` | Every 10-second observation this session |
 | GET | `/api/stats` | Descriptive statistics and trend |
 | GET | `/api/prediction` | Latest forecast |
