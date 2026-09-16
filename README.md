@@ -19,7 +19,7 @@ from a Streamlit dashboard.
 | **What does the model predict?** | Given the **last 60 candles**, it predicts the **log return of the next candle**, converted back to a price: `price × exp(return)`. Horizon: **60 seconds**. |
 | **How does it work?** | `Binance API → FastAPI (polls every 10s) → features → LSTM → prediction → Streamlit + chatbot` |
 | **What are the results?** | On a held-out test split: **MAE $29.65**, **RMSE $43.14**, **MAPE 0.0386%**, **R² 0.9986**. It ties a naive baseline on direction, and [the README says so honestly](#8-honest-limitations). |
-| **How do I run it?** | `pip install -r requirements.txt` → `python train_model.py` → `run_all.bat` |
+| **How do I run it?** | `pip install -r requirements.txt` → `python train_model.py` → start the backend and the dashboard (two commands, below) |
 
 ---
 
@@ -67,21 +67,17 @@ pip install -r requirements.txt
 # 2. download the data and train the model  (~1 minute, one command)
 python train_model.py
 
-# 3. run everything
-run_all.bat
+# 3. terminal 1 - the backend
+python -m app.main
+
+# 4. terminal 2 - the dashboard
+python -m streamlit run streamlit_app.py
 ```
 
 Then open:
 
 - **Dashboard** → http://localhost:8501
 - **API docs** → http://127.0.0.1:8000/docs
-
-Without the batch file, in two terminals:
-
-```bash
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-python -m streamlit run streamlit_app.py
-```
 
 The first forecast appears within 10 seconds. The live actual-vs-predicted chart needs about two
 minutes, because a forecast can only be scored once the minute it refers to has closed.
@@ -96,6 +92,7 @@ RealTime_Crypto_AI_System/
 ├── streamlit_app.py        ← the dashboard
 ├── test_system.py          ← 61 checks
 ├── make_diagram.py         ← regenerates the architecture image above
+├── .streamlit/config.toml  ← dashboard theme
 │
 ├── app/
 │   ├── config.py           every constant in one place
@@ -116,7 +113,7 @@ RealTime_Crypto_AI_System/
 ```
 
 Every module is small enough to read in one sitting: the largest is the dashboard page at about
-480 lines, and most sit between 100 and 330.
+400 lines, and most sit between 100 and 330.
 
 ---
 
@@ -275,16 +272,16 @@ data comes from, and how the model works.
 
 ## 5. The dashboard
 
-Four tabs:
+A dark trading-terminal layout with four tabs:
 
-- **🔴 Live monitor** — live price, forecast, 24h change, trend and freshness; a candlestick chart
-  with the forecast drawn one minute ahead; live actual-vs-predicted and per-minute error charts;
-  live scoring; statistics; and the raw candles received from the API.
-- **🧠 Model evaluation** — all five metrics, the naive baseline, the training configuration and
-  every training plot.
-- **💬 Chatbot** — chat with suggested questions and an expander showing the exact verified data
-  handed to the Transformer.
-- **ℹ️ About** — architecture, modelling choices, error handling.
+- **Live** — price, forecast, 24h change, trend and data freshness as cards; a plain
+  candlestick-and-volume chart; forecast-vs-reality and error charts for the running session;
+  live scoring; window statistics; and the raw candles received from the API.
+- **Model** — the five offline metrics, the naive baseline, the model configuration and every
+  training plot.
+- **Chat** — the Transformer chatbot with suggested questions and an expander showing the exact
+  verified data it was given.
+- **About** — the pipeline in one screen.
 
 ---
 

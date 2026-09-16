@@ -386,7 +386,7 @@ def main() -> int:
     print(f"  Test MAPE  : {price['MAPE']:>12.4f} %")
     print(f"  Test R2    : {price['R2']:>12.4f}")
     print(f"\n  Saved to   : {MODELS_DIR}")
-    print("  Next step  : run_all.bat   (or  python -m app.main)")
+    print("  Next step  : python -m app.main   then   python -m streamlit run streamlit_app.py")
     print("=" * 64)
     return 0
 

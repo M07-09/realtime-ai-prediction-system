@@ -1,8 +1,8 @@
 """
 Every chart and table the dashboard draws.
 
-Kept apart from streamlit_app.py so the page file stays about layout and the
-plotting details stay reviewable on their own.
+All figures share one dark, trading-terminal style so the page reads as a
+single product rather than a collection of default Plotly charts.
 """
 from __future__ import annotations
 
@@ -13,42 +13,58 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from app.config import POLL_INTERVAL_SECONDS
+__all__ = ["render_table", "money", "candlestick_chart",
+           "actual_vs_predicted_chart", "error_chart", "tick_chart"]
 
-__all__ = ["render_table", "money", "price_chart", "actual_vs_predicted_chart",
-           "error_chart", "tick_chart"]
+# Palette shared with the page CSS in streamlit_app.py
+BG = "#0f1419"
+PANEL = "#151b23"
+GRID = "#1f2731"
+TEXT = "#9aa4b2"
+UP = "#26a69a"
+DOWN = "#ef5350"
+ACCENT = "#4f8cff"
+ACCENT_2 = "#f5a524"
+
+
+def _base_layout(fig: go.Figure, height: int) -> go.Figure:
+    fig.update_layout(
+        template="plotly_dark",
+        height=height,
+        paper_bgcolor=PANEL,
+        plot_bgcolor=PANEL,
+        font=dict(family="Inter, -apple-system, Segoe UI, sans-serif", color=TEXT, size=11),
+        margin=dict(l=8, r=56, t=12, b=8),
+        hovermode="x unified",
+        hoverlabel=dict(bgcolor="#1c2430", bordercolor=GRID, font=dict(color="#e6edf3")),
+        showlegend=False,
+        dragmode="pan",
+    )
+    fig.update_xaxes(gridcolor=GRID, zeroline=False, showline=False,
+                     showspikes=True, spikecolor=TEXT, spikethickness=1,
+                     spikedash="dot", spikemode="across")
+    fig.update_yaxes(gridcolor=GRID, zeroline=False, showline=False, side="right",
+                     showspikes=True, spikecolor=TEXT, spikethickness=1,
+                     spikedash="dot", spikemode="across")
+    return fig
 
 
 def render_table(df: pd.DataFrame, height: Optional[int] = None) -> None:
     """
-    Render a DataFrame as a plain HTML table.
+    Render a DataFrame as plain HTML.
 
-    st.dataframe / st.table serialise through pyarrow, which some locked-down
-    Windows installations block with an Application Control policy. Rendering
-    the HTML ourselves keeps the dashboard working everywhere and adds no
-    dependency.
+    st.dataframe serialises through pyarrow, which some locked-down Windows
+    installations block with an Application Control policy. Rendering HTML
+    ourselves keeps the dashboard working everywhere.
     """
-    # NOTE: the markup below must start at column 0. Markdown turns any line
-    # indented by four or more spaces into a code block, which would print the
-    # raw HTML instead of rendering it.
+    # The markup must start at column 0: an indented line becomes a code block.
     style = f"max-height:{height}px; overflow-y:auto;" if height else ""
     html = df.to_html(index=False, border=0, justify="left",
-                      classes="rtaps-table", float_format=lambda v: f"{v:,.2f}")
-    block = (
-        "<style>\n"
-        f".rtaps-wrap {{ {style} overflow-x:auto; "
-        "border:1px solid rgba(128,128,128,0.32); border-radius:8px; }\n"
-        ".rtaps-table { width:100%; border-collapse:collapse; font-size:0.82rem; "
-        "color:inherit; background:transparent; }\n"
-        ".rtaps-table th { background:rgba(128,128,128,0.16); text-align:left; "
-        "padding:0.45rem 0.6rem; position:sticky; top:0; font-weight:600; }\n"
-        ".rtaps-table td { padding:0.38rem 0.6rem; "
-        "border-top:1px solid rgba(128,128,128,0.22); }\n"
-        ".rtaps-table tr:hover td { background:rgba(128,128,128,0.10); }\n"
-        "</style>\n"
-        f'<div class="rtaps-wrap">{html}</div>'
+                      classes="tbl", float_format=lambda v: f"{v:,.2f}")
+    st.markdown(
+        f'<div class="tbl-wrap" style="{style}">{html}</div>',
+        unsafe_allow_html=True,
     )
-    st.markdown(block, unsafe_allow_html=True)
 
 
 def money(value: Optional[float], digits: int = 2) -> str:
@@ -65,96 +81,67 @@ def money(value: Optional[float], digits: int = 2) -> str:
 # --------------------------------------------------------------------------
 # Charts
 # --------------------------------------------------------------------------
-def price_chart(bars: List[Dict[str, Any]], prediction: Dict[str, Any]) -> go.Figure:
-    """Candle history with the LSTM forecast plotted one minute into the future."""
+def candlestick_chart(bars: List[Dict[str, Any]]) -> go.Figure:
+    """Price candles with a volume pane underneath, nothing else."""
     df = pd.DataFrame(bars)
     df["open_time"] = pd.to_datetime(df["open_time"], utc=True)
 
-    fig = make_subplots(
-        rows=2, cols=1, shared_xaxes=True, row_heights=[0.75, 0.25],
-        vertical_spacing=0.06,
-    )
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                        row_heights=[0.78, 0.22], vertical_spacing=0.03)
     fig.add_trace(
         go.Candlestick(
             x=df["open_time"], open=df["open"], high=df["high"],
             low=df["low"], close=df["close"], name="BTC/USDT",
-            increasing_line_color="#16a34a", decreasing_line_color="#dc2626",
+            increasing=dict(line=dict(color=UP, width=1), fillcolor=UP),
+            decreasing=dict(line=dict(color=DOWN, width=1), fillcolor=DOWN),
+            whiskerwidth=0.4,
         ),
         row=1, col=1,
     )
+    colours = [UP if c >= o else DOWN for o, c in zip(df["open"], df["close"])]
     fig.add_trace(
-        go.Scatter(x=df["open_time"], y=df["close"].rolling(15).mean(),
-                   name="15-min average", line=dict(color="#2563eb", width=1.3)),
-        row=1, col=1,
-    )
-
-    if prediction.get("available"):
-        target = pd.to_datetime(prediction["target_time"], utc=True)
-        last_time = df["open_time"].iloc[-1]
-        last_close = float(df["close"].iloc[-1])
-        predicted = float(prediction["predicted_price"])
-        colour = "#16a34a" if predicted >= last_close else "#dc2626"
-        fig.add_trace(
-            go.Scatter(
-                x=[last_time, target], y=[last_close, predicted],
-                name="LSTM forecast", mode="lines+markers",
-                line=dict(color=colour, width=2.4, dash="dot"),
-                marker=dict(size=[6, 13], symbol=["circle", "star"], color=colour),
-            ),
-            row=1, col=1,
-        )
-
-    colours = ["#16a34a" if c >= o else "#dc2626" for o, c in zip(df["open"], df["close"])]
-    fig.add_trace(
-        go.Bar(x=df["open_time"], y=df["volume"], name="volume",
-               marker_color=colours, opacity=0.55),
+        go.Bar(x=df["open_time"], y=df["volume"], name="Volume",
+               marker_color=colours, opacity=0.45, hovertemplate="%{y:,.2f}<extra></extra>"),
         row=2, col=1,
     )
 
-    fig.update_yaxes(title_text="Price (USDT)", row=1, col=1)
-    fig.update_yaxes(title_text="Volume", row=2, col=1)
-    fig.update_layout(
-        height=540, margin=dict(l=10, r=10, t=54, b=10),
-        xaxis_rangeslider_visible=False, showlegend=True,
-        legend=dict(orientation="h", yanchor="bottom", y=1.03, x=0),
-        hovermode="x unified",
-    )
+    _base_layout(fig, 560)
+    fig.update_layout(xaxis_rangeslider_visible=False)
+    fig.update_yaxes(tickprefix="$", tickformat=",.0f", row=1, col=1)
+    fig.update_yaxes(tickformat=".2s", row=2, col=1, showgrid=False)
+    fig.update_xaxes(showticklabels=False, row=1, col=1)
     return fig
 
 
 def actual_vs_predicted_chart(records: List[Dict[str, Any]]) -> go.Figure:
-    """Live scoring: each matured forecast against the price that really occurred."""
+    """Each matured forecast against the price that really occurred."""
     df = pd.DataFrame(records)
     df["target_time"] = pd.to_datetime(df["target_time"], utc=True)
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df["target_time"], y=df["actual_price"],
-                             name="actual price", mode="lines+markers",
-                             line=dict(color="#111827", width=2), marker=dict(size=5)))
-    fig.add_trace(go.Scatter(x=df["target_time"], y=df["predicted_price"],
-                             name="LSTM prediction", mode="lines+markers",
-                             line=dict(color="#dc2626", width=2, dash="dash"),
-                             marker=dict(size=5, symbol="x")))
-    fig.update_layout(
-        height=330, margin=dict(l=10, r=10, t=30, b=10),
-        title="Actual vs predicted (forecasts made 1 minute earlier, live session)",
-        yaxis_title="USDT", hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
-    )
+    fig.add_trace(go.Scatter(x=df["target_time"], y=df["actual_price"], name="Actual",
+                             mode="lines+markers", line=dict(color="#e6edf3", width=1.8),
+                             marker=dict(size=5)))
+    fig.add_trace(go.Scatter(x=df["target_time"], y=df["predicted_price"], name="LSTM",
+                             mode="lines+markers",
+                             line=dict(color=ACCENT_2, width=1.8, dash="dot"),
+                             marker=dict(size=5, symbol="diamond")))
+    _base_layout(fig, 300)
+    fig.update_layout(showlegend=True,
+                      legend=dict(orientation="h", y=1.08, x=0, bgcolor="rgba(0,0,0,0)"))
+    fig.update_yaxes(tickprefix="$", tickformat=",.0f")
     return fig
 
 
 def error_chart(records: List[Dict[str, Any]]) -> go.Figure:
     df = pd.DataFrame(records)
     df["target_time"] = pd.to_datetime(df["target_time"], utc=True)
-    colours = ["#16a34a" if ok else "#dc2626" for ok in df["direction_correct"]]
+    colours = [UP if ok else DOWN for ok in df["direction_correct"]]
     fig = go.Figure(go.Bar(x=df["target_time"], y=df["error"], marker_color=colours,
-                           name="prediction error"))
-    fig.update_layout(
-        height=260, margin=dict(l=10, r=10, t=30, b=10),
-        title="Forecast error per minute (green = direction called correctly)",
-        yaxis_title="predicted - actual (USDT)", showlegend=False,
-    )
+                           hovertemplate="%{y:+,.2f} USDT<extra></extra>"))
+    fig.add_hline(y=0, line=dict(color=TEXT, width=1))
+    _base_layout(fig, 220)
+    fig.update_yaxes(tickprefix="$", tickformat="+,.0f")
     return fig
 
 
@@ -162,11 +149,7 @@ def tick_chart(ticks: List[Dict[str, Any]]) -> go.Figure:
     df = pd.DataFrame(ticks)
     df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
     fig = go.Figure(go.Scatter(x=df["timestamp"], y=df["price"], mode="lines+markers",
-                               line=dict(color="#7c3aed", width=1.6), marker=dict(size=4),
-                               name="10-second tick"))
-    fig.update_layout(
-        height=260, margin=dict(l=10, r=10, t=30, b=10),
-        title=f"Real-time stream - one point per API call ({POLL_INTERVAL_SECONDS} s)",
-        yaxis_title="USDT", showlegend=False,
-    )
+                               line=dict(color=ACCENT, width=1.6), marker=dict(size=4)))
+    _base_layout(fig, 300)
+    fig.update_yaxes(tickprefix="$", tickformat=",.0f")
     return fig

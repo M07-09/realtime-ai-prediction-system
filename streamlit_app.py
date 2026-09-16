@@ -1,26 +1,23 @@
 """
 Streamlit dashboard - the user interface of the system.
 
-It never touches the external API or the model directly: everything comes from
-the FastAPI backend, which keeps the architecture clean
+Everything on the page comes from the FastAPI backend; the dashboard never
+touches the external API or the model directly:
 
     External API -> FastAPI -> processing -> LSTM -> prediction -> Streamlit
 
-Auto-update
------------
-The live panels live inside an st.fragment that re-runs every 10 seconds, so
-the numbers, the charts and the forecast refresh on their own while the chat
-conversation on the right-hand side is preserved.
+The live panels sit inside an st.fragment that re-runs every 10 seconds, so
+prices, charts and the forecast refresh on their own while the chat
+conversation is preserved.
 
 Run:
-    streamlit run streamlit_app.py
+    python -m streamlit run streamlit_app.py
 """
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -28,29 +25,64 @@ import pandas as pd
 import requests
 import streamlit as st
 
-from app.charts import (actual_vs_predicted_chart, error_chart, money, price_chart,
-                        render_table, tick_chart)
+from app.charts import (actual_vs_predicted_chart, candlestick_chart, error_chart,
+                        money, render_table, tick_chart)
 from app.config import ASSET_NAME, BACKEND_URL, MODELS_DIR, POLL_INTERVAL_SECONDS, SYMBOL
 
-st.set_page_config(
-    page_title="Real-Time AI Prediction System",
-    page_icon="📈",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+st.set_page_config(page_title="Real-Time AI Prediction", page_icon="📈",
+                   layout="wide", initial_sidebar_state="expanded")
 
 CSS = """
 <style>
-  .block-container {padding-top: 2.2rem; padding-bottom: 2rem;}
-  div[data-testid="stMetricValue"] {font-size: 1.7rem;}
-  .status-ok   {color:#12864a; font-weight:600;}
-  .status-warn {color:#b45309; font-weight:600;}
-  .status-bad  {color:#b91c1c; font-weight:600;}
-  .small-note  {color:#6b7280; font-size:0.82rem;}
-  .fact-box {background:rgba(128,128,128,0.12); border:1px solid rgba(128,128,128,0.32);
-             border-radius:8px; color:inherit;
-             padding:0.6rem 0.8rem; font-family:ui-monospace,monospace; font-size:0.78rem;
-             white-space:pre-wrap;}
+  .block-container {padding-top: 1.2rem; padding-bottom: 2rem; max-width: 1500px;}
+  header[data-testid="stHeader"] {background: transparent;}
+  h1, h2, h3 {letter-spacing: -0.01em;}
+
+  /* header strip */
+  .hdr {display:flex; align-items:center; gap:.7rem; flex-wrap:wrap;
+        padding:.2rem 0 .9rem 0; border-bottom:1px solid #1f2731; margin-bottom:1rem;}
+  .hdr-t {font-size:1.35rem; font-weight:700; color:#e6edf3;}
+  .pill {font-size:.72rem; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+         color:#9aa4b2; background:#151b23; border:1px solid #1f2731;
+         border-radius:999px; padding:.18rem .6rem;}
+  .dot {width:.55rem; height:.55rem; border-radius:50%; display:inline-block;
+        background:#26a69a; box-shadow:0 0 0 3px rgba(38,166,154,.25);}
+  .dot.off {background:#ef5350; box-shadow:0 0 0 3px rgba(239,83,80,.25);}
+  .hdr-r {margin-left:auto; font-size:.78rem; color:#6b7684;}
+
+  /* kpi cards */
+  .kpi {background:#151b23; border:1px solid #1f2731; border-radius:10px;
+        padding:.8rem 1rem; min-height:92px;}
+  .kpi-l {font-size:.68rem; font-weight:600; letter-spacing:.05em; text-transform:uppercase;
+          color:#6b7684; margin-bottom:.3rem; white-space:nowrap; overflow:hidden;
+          text-overflow:ellipsis;}
+  .kpi-v {font-size:clamp(1.05rem, 1.6vw, 1.5rem); font-weight:700; color:#e6edf3;
+          line-height:1.15; font-variant-numeric: tabular-nums; white-space:nowrap;}
+  .kpi-d {font-size:.74rem; margin-top:.35rem; color:#9aa4b2; white-space:nowrap;
+          overflow:hidden; text-overflow:ellipsis;}
+  .up {color:#26a69a;} .down {color:#ef5350;} .flat {color:#9aa4b2;}
+
+  /* panels */
+  .panel-t {font-size:.78rem; font-weight:600; letter-spacing:.05em; text-transform:uppercase;
+            color:#6b7684; margin:.2rem 0 .5rem 0;}
+  .note {font-size:.78rem; color:#6b7684;}
+
+  /* tables */
+  .tbl-wrap {overflow-x:auto; border:1px solid #1f2731; border-radius:10px; background:#151b23;}
+  .tbl {width:100%; border-collapse:collapse; font-size:.8rem; color:#e6edf3;
+        font-variant-numeric: tabular-nums;}
+  .tbl th {text-align:left; padding:.5rem .7rem; color:#6b7684; font-weight:600;
+           font-size:.7rem; letter-spacing:.05em; text-transform:uppercase;
+           border-bottom:1px solid #1f2731; position:sticky; top:0; background:#151b23;}
+  .tbl td {padding:.42rem .7rem; border-top:1px solid #1a222c;}
+  .tbl tr:hover td {background:#1a222c;}
+
+  .fact {background:#0f1419; border:1px solid #1f2731; border-radius:8px;
+         padding:.6rem .8rem; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+         font-size:.74rem; color:#9aa4b2; white-space:pre-wrap;}
+
+  div[data-testid="stTabs"] button {font-weight:600;}
+  section[data-testid="stSidebar"] {border-right:1px solid #1f2731;}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -65,15 +97,14 @@ def api_get(path: str, params: Optional[Dict[str, Any]] = None, timeout: int = 1
         response.raise_for_status()
         return {"ok": True, "data": response.json()}
     except requests.exceptions.ConnectionError:
-        return {"ok": False, "error": "connection",
-                "message": f"Cannot reach the backend at {BACKEND_URL}. "
-                           "Start it with:  python -m app.main"}
+        return {"ok": False, "message": f"Cannot reach the backend at {BACKEND_URL}. "
+                                        "Start it with:  python -m app.main"}
     except requests.exceptions.Timeout:
-        return {"ok": False, "error": "timeout", "message": "The backend did not answer in time."}
+        return {"ok": False, "message": "The backend did not answer in time."}
     except requests.exceptions.HTTPError as exc:
-        return {"ok": False, "error": "http", "message": f"Backend returned {exc.response.status_code}."}
+        return {"ok": False, "message": f"Backend returned {exc.response.status_code}."}
     except Exception as exc:                          # noqa: BLE001
-        return {"ok": False, "error": "unknown", "message": str(exc)}
+        return {"ok": False, "message": str(exc)}
 
 
 def api_post(path: str, payload: Dict[str, Any], timeout: int = 180) -> Dict[str, Any]:
@@ -90,287 +121,290 @@ def api_post(path: str, payload: Dict[str, Any], timeout: int = 180) -> Dict[str
 
 
 # --------------------------------------------------------------------------
+# Small HTML building blocks
+# --------------------------------------------------------------------------
+def kpi(col, label: str, value: str, delta: str = "", tone: str = "flat") -> None:
+    col.markdown(
+        f'<div class="kpi"><div class="kpi-l">{label}</div>'
+        f'<div class="kpi-v">{value}</div>'
+        f'<div class="kpi-d {tone}">{delta}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def panel_title(text: str) -> None:
+    st.markdown(f'<div class="panel-t">{text}</div>', unsafe_allow_html=True)
+
+
+def tone_of(value: float, eps: float = 1e-9) -> str:
+    return "up" if value > eps else "down" if value < -eps else "flat"
+
+
+def header(live: Dict[str, Any]) -> None:
+    online = bool(live.get("available"))
+    age = live.get("age_seconds")
+    right = f"updated {age:.0f} s ago · {live.get('source', '')}" if online and age is not None \
+        else "waiting for the backend"
+    st.markdown(
+        f'<div class="hdr"><span class="dot{"" if online else " off"}"></span>'
+        f'<span class="hdr-t">Real-Time AI Prediction</span>'
+        f'<span class="pill">{SYMBOL}</span><span class="pill">Binance</span>'
+        f'<span class="pill">LSTM · +60 s</span><span class="pill">refresh {POLL_INTERVAL_SECONDS} s</span>'
+        f'<span class="hdr-r">{right}</span></div>',
+        unsafe_allow_html=True,
+    )
+
+
+# --------------------------------------------------------------------------
 # Sidebar
 # --------------------------------------------------------------------------
 def render_sidebar() -> None:
     with st.sidebar:
-        st.header("System")
+        st.markdown("#### System")
         health = api_get("/health", timeout=8)
-
         if not health["ok"]:
             st.error(health["message"])
-            st.caption("The dashboard keeps running and will reconnect automatically.")
+            st.caption("The page keeps running and reconnects automatically.")
             return
 
-        data = health["data"]
-        status = data["status"]
-        if status == "healthy":
-            st.success(f"Backend: {status}")
-        else:
-            st.warning(f"Backend: {status}")
+        d = health["data"]
+        (st.success if d["status"] == "healthy" else st.warning)(d["status"].capitalize())
 
-        st.metric("API calls made", data["poll_count"])
-        col_a, col_b = st.columns(2)
-        col_a.metric("Errors", data["error_count"])
-        col_b.metric("Uptime", f"{data['uptime_seconds'] / 60:.1f} min")
+        c1, c2 = st.columns(2)
+        c1.metric("API calls", d["poll_count"])
+        c2.metric("Errors", d["error_count"])
+        st.caption(f"Uptime {d['uptime_seconds'] / 60:.0f} min")
 
-        st.markdown(
-            f"- External API: {'reachable' if data['external_api_reachable'] else 'unreachable'}\n"
-            f"- Collector: {'running' if data['collector_running'] else 'stopped'}\n"
-            f"- LSTM model: {'loaded' if data['model_loaded'] else 'not loaded'}\n"
-            f"- Transformer: {'loaded' if data['chatbot_loaded'] else 'loads on first question'}"
-        )
-        if data.get("last_error"):
-            st.warning(f"Last error: {data['last_error']}")
+        rows = [
+            ("External API", "reachable" if d["external_api_reachable"] else "unreachable"),
+            ("Collector", "running" if d["collector_running"] else "stopped"),
+            ("LSTM", "loaded" if d["model_loaded"] else "not loaded"),
+            ("Transformer", "loaded" if d["chatbot_loaded"] else "loads on first question"),
+        ]
+        st.markdown("\n".join(f"- {k}: **{v}**" for k, v in rows))
+        if d.get("last_error"):
+            st.warning(d["last_error"])
 
         st.divider()
-        st.header("Architecture")
-        st.code(
-            "Binance API\n"
-            "     |\n"
-            "  FastAPI  (polls every 10 s)\n"
-            "     |\n"
-            "  Processing (features)\n"
-            "     |\n"
-            "   LSTM  ->  prediction\n"
-            "     |\n"
-            "Streamlit + Transformer chat",
-            language="text",
-        )
-
-        st.divider()
-        if st.button("Force refresh now", width="stretch"):
-            result = api_post("/api/refresh", {}, timeout=30)
-            if result["ok"]:
-                st.success("Polled the external API")
-            else:
-                st.error(result["message"])
-
-        st.caption(f"Backend: {BACKEND_URL}")
+        if st.button("Poll now", width="stretch"):
+            r = api_post("/api/refresh", {}, timeout=30)
+            (st.success if r["ok"] else st.error)("Polled" if r["ok"] else r["message"])
+        st.caption(f"Backend {BACKEND_URL}")
 
 
 # --------------------------------------------------------------------------
-# Live section (auto-refreshing fragment)
+# Live tab (auto-refreshing fragment)
 # --------------------------------------------------------------------------
 @st.fragment(run_every=POLL_INTERVAL_SECONDS)
 def live_section() -> None:
     result = api_get("/api/status", {"history_limit": 240})
-
     if not result["ok"]:
-        st.error(f"⚠️ {result['message']}")
-        st.info("This panel retries every 10 seconds on its own.")
+        header({})
+        st.error(result["message"])
+        st.caption("This panel retries every 10 seconds on its own.")
         return
 
-    status = result["data"]
-    live = status.get("live", {})
-    prediction = status.get("prediction", {})
-    stats = status.get("statistics", {})
-    collector = status.get("collector", {})
+    s = result["data"]
+    live, pred = s.get("live", {}), s.get("prediction", {})
+    stats, coll = s.get("statistics", {}), s.get("collector", {})
+    key = coll.get("poll_count", 0)
 
-    # ---------------------------------------------------------- headline
+    header(live)
+
     if not live.get("available"):
-        st.error(f"⚠️ No live data: {live.get('message', 'the external API did not answer')}")
+        st.error(f"No live data: {live.get('message', 'the external API did not answer')}")
     else:
         c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric(f"{ASSET_NAME} price",
-                  money(live.get("price")),
-                  f"{live.get('tick_change', 0):+,.2f} since last poll")
+        tick = live.get("tick_change", 0) or 0
+        kpi(c1, f"{ASSET_NAME} price", money(live.get("price")),
+            f"{tick:+,.2f} since last poll", tone_of(tick))
 
-        if prediction.get("available"):
-            arrow = {"up": "▲", "down": "▼", "stable": "■"}.get(prediction.get("direction"), "")
-            c2.metric("LSTM forecast (+60 s)",
-                      money(prediction.get("predicted_price")),
-                      f"{arrow} {prediction.get('predicted_change_abs', 0):+,.2f} "
-                      f"({prediction.get('predicted_change_pct', 0):+.4f}%)")
+        if pred.get("available"):
+            ch = pred.get("predicted_change_abs", 0) or 0
+            kpi(c2, "Forecast · +60 s", money(pred.get("predicted_price")),
+                f"{ch:+,.2f} ({pred.get('predicted_change_pct', 0):+.4f}%) · {pred.get('direction')}",
+                tone_of(ch, 0.01))
         else:
-            c2.metric("LSTM forecast (+60 s)", "n/a")
-            c2.caption(prediction.get("message", ""))
+            kpi(c2, "Forecast · +60 s", "—", pred.get("message", ""))
 
-        c3.metric("24h change", f"{live.get('change_24h_pct', 0):+.2f}%",
-                  f"H {money(live.get('high_24h'), 0)} / L {money(live.get('low_24h'), 0)}")
+        d24 = live.get("change_24h_pct", 0) or 0
+        kpi(c3, "24h change", f"{d24:+.2f}%",
+            f"H {money(live.get('high_24h'), 0)} · L {money(live.get('low_24h'), 0)}", tone_of(d24))
 
         trend = (stats.get("trend") or {}) if stats.get("available") else {}
-        c4.metric(f"Trend ({trend.get('lookback', 15)} min)",
-                  str(trend.get("direction", "unknown")).capitalize(),
-                  f"{trend.get('change_pct', 0):+.3f}%")
+        tc = trend.get("change_pct", 0) or 0
+        kpi(c4, f"Trend · {trend.get('lookback', 15)} min",
+            str(trend.get("direction", "—")).capitalize(), f"{tc:+.3f}%", tone_of(tc))
 
         age = live.get("age_seconds", 0) or 0
-        freshness = "fresh" if age < 25 else "stale"
-        c5.metric("Last update", f"{age:.0f} s ago", freshness)
+        kpi(c5, "Data freshness", f"{age:.0f} s", "fresh" if age < 25 else "stale",
+            "up" if age < 25 else "down")
 
-        st.caption(
-            f"Source: {live.get('source')} · bars in memory: {live.get('buffer_bars')} · "
-            f"API calls: {collector.get('poll_count')} (errors: {collector.get('error_count')}) · "
-            f"server time {status.get('server_time')} UTC · auto-refresh every "
-            f"{POLL_INTERVAL_SECONDS} s"
-        )
+    if coll.get("consecutive_errors", 0) > 0:
+        st.warning(f"External API failed {coll['consecutive_errors']} time(s) in a row: "
+                   f"{coll.get('last_error')}. Showing the last known values.")
 
-    if collector.get("consecutive_errors", 0) > 0:
-        st.warning(f"The external API has failed {collector['consecutive_errors']} time(s) in a row: "
-                   f"{collector.get('last_error')}. Showing the last known values.")
-
-    # ------------------------------------------------------------- charts
-    history = status.get("history", [])
+    st.write("")
+    history = s.get("history", [])
     if history:
-        st.plotly_chart(price_chart(history, prediction), width="stretch",
-                        key=f"price_{collector.get('poll_count')}")
+        st.plotly_chart(candlestick_chart(history), width="stretch", key=f"px_{key}",
+                        config={"displayModeBar": False, "scrollZoom": True})
     else:
         st.info("Waiting for the first candles ...")
 
-    left, right = st.columns([3, 2])
+    left, right = st.columns([3, 2], gap="large")
+    resolved, ev = s.get("resolved_predictions", []), s.get("live_evaluation", {})
 
-    resolved = status.get("resolved_predictions", [])
-    live_eval = status.get("live_evaluation", {})
     with left:
+        panel_title("Forecast vs reality · live session")
         if resolved:
             st.plotly_chart(actual_vs_predicted_chart(resolved), width="stretch",
-                            key=f"avp_{collector.get('poll_count')}")
-            st.plotly_chart(error_chart(resolved), width="stretch",
-                            key=f"err_{collector.get('poll_count')}")
+                            key=f"avp_{key}", config={"displayModeBar": False})
+            panel_title("Error per forecast · green = direction correct")
+            st.plotly_chart(error_chart(resolved), width="stretch", key=f"err_{key}",
+                            config={"displayModeBar": False})
         else:
-            st.info(f"⏳ {live_eval.get('message', 'Scoring starts once a forecast matures.')}")
-            ticks = status.get("ticks", [])
+            st.markdown(f'<div class="note">{ev.get("message", "Scoring starts once a forecast matures.")}</div>',
+                        unsafe_allow_html=True)
+            ticks = s.get("ticks", [])
             if ticks:
-                st.plotly_chart(tick_chart(ticks), width="stretch",
-                                key=f"tick_{collector.get('poll_count')}")
+                panel_title(f"Real-time stream · one point per API call ({POLL_INTERVAL_SECONDS} s)")
+                st.plotly_chart(tick_chart(ticks), width="stretch", key=f"tick_{key}",
+                                config={"displayModeBar": False})
 
     with right:
-        st.subheader("Live scoring")
-        if live_eval.get("available"):
-            m1, m2 = st.columns(2)
-            m1.metric("MAE", money(live_eval.get("MAE")))
-            m2.metric("RMSE", money(live_eval.get("RMSE")))
-            m3, m4 = st.columns(2)
-            m3.metric("MAPE", f"{live_eval.get('MAPE', 0):.4f}%")
-            m4.metric("Direction", f"{live_eval.get('directional_accuracy_pct', 0):.1f}%")
-            st.caption(f"{live_eval.get('resolved')} forecasts scored, "
-                       f"{live_eval.get('pending')} waiting to mature.")
+        panel_title("Live scoring")
+        if ev.get("available"):
+            a, b = st.columns(2)
+            kpi(a, "MAE", money(ev.get("MAE")))
+            kpi(b, "RMSE", money(ev.get("RMSE")))
+            a, b = st.columns(2)
+            kpi(a, "MAPE", f"{ev.get('MAPE', 0):.4f}%")
+            acc = ev.get("directional_accuracy_pct", 0) or 0
+            kpi(b, "Direction", f"{acc:.1f}%", f"{ev.get('resolved')} scored · {ev.get('pending')} pending")
         else:
-            st.caption(live_eval.get("message", "Waiting for the first matured forecast."))
+            st.markdown(f'<div class="note">{ev.get("message", "")}</div>', unsafe_allow_html=True)
 
-        st.subheader("Collected window")
+        st.write("")
+        panel_title("Collected window")
         if stats.get("available"):
             render_table(pd.DataFrame({
-                "metric": ["bars", "mean", "median", "min", "max",
-                           "std dev", "change %", "1-min volatility %"],
-                "value": [
-                    f"{stats.get('count')}",
-                    money(stats.get("mean")), money(stats.get("median")),
-                    money(stats.get("min")), money(stats.get("max")),
-                    money(stats.get("std")),
-                    f"{stats.get('change_pct', 0):+.3f}%",
-                    f"{stats.get('volatility_pct', 0):.4f}%",
-                ],
+                "metric": ["Candles", "Mean", "Median", "Low", "High", "Std dev",
+                           "Change", "1-min volatility"],
+                "value": [f"{stats.get('count')}", money(stats.get("mean")),
+                          money(stats.get("median")), money(stats.get("min")),
+                          money(stats.get("max")), money(stats.get("std")),
+                          f"{stats.get('change_pct', 0):+.3f}%",
+                          f"{stats.get('volatility_pct', 0):.4f}%"],
             }))
-        else:
-            st.caption("No statistics yet.")
 
     if history:
-        with st.expander("Raw data received from the external API (latest bars)"):
-            table = pd.DataFrame(history).tail(25)[
-                ["open_time", "open", "high", "low", "close", "volume", "trades"]
-            ].iloc[::-1]
-            table["open_time"] = table["open_time"].str.replace("+00:00", " UTC", regex=False)
-            render_table(table, height=420)
+        with st.expander("Latest candles received from the external API"):
+            t = pd.DataFrame(history).tail(25)[
+                ["open_time", "open", "high", "low", "close", "volume", "trades"]].iloc[::-1]
+            t["open_time"] = t["open_time"].str.replace("+00:00", " UTC", regex=False)
+            render_table(t, height=420)
 
 
 # --------------------------------------------------------------------------
-# Model evaluation section
+# Model tab
 # --------------------------------------------------------------------------
 def model_section() -> None:
     result = api_get("/api/model/metrics")
     if not result["ok"]:
         st.error(result["message"])
         return
-
-    metrics = result["data"]
-    if not metrics.get("available"):
-        st.warning(metrics.get("message", "No metrics available."))
-        st.code("python -m train_model", language="bash")
+    m = result["data"]
+    if not m.get("available"):
+        st.warning(m.get("message", "No metrics available."))
+        st.code("python train_model.py", language="bash")
         return
 
-    test = metrics.get("test", {})
-    price = test.get("price_space", {})
-    naive = test.get("naive_baseline_price_space", {})
-    data_info = metrics.get("data", {})
-    training = metrics.get("training", {})
+    test = m.get("test", {})
+    price, naive = test.get("price_space", {}), test.get("naive_baseline_price_space", {})
+    info, tr = m.get("data", {}), m.get("training", {})
 
-    st.subheader("Offline evaluation on the held-out test split")
+    panel_title("Held-out test split · price space")
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("MAE", money(price.get("MAE")))
-    c2.metric("RMSE", money(price.get("RMSE")))
-    c3.metric("MSE", f"{price.get('MSE', 0):,.1f}")
-    c4.metric("MAPE", f"{price.get('MAPE', 0):.4f}%")
-    c5.metric("R²", f"{price.get('R2', 0):.4f}")
+    kpi(c1, "MAE", money(price.get("MAE")))
+    kpi(c2, "RMSE", money(price.get("RMSE")))
+    kpi(c3, "MSE", f"{price.get('MSE', 0):,.1f}")
+    kpi(c4, "MAPE", f"{price.get('MAPE', 0):.4f}%")
+    kpi(c5, "R²", f"{price.get('R2', 0):.4f}")
+    st.markdown(
+        f'<div class="note" style="margin-top:.6rem">{test.get("samples", 0):,} test sequences · '
+        f'directional accuracy {test.get("directional_accuracy_pct", 0):.2f}% · '
+        f'naive "no-change" RMSE {money(naive.get("RMSE"))} · trained on '
+        f'{info.get("total_bars", 0):,} candles in {tr.get("training_seconds", 0):.1f} s '
+        f'on {tr.get("device")} · {tr.get("parameters", 0):,} parameters</div>',
+        unsafe_allow_html=True)
 
-    st.caption(
-        f"Test samples: {test.get('samples'):,} · directional accuracy "
-        f"{test.get('directional_accuracy_pct', 0):.2f}% · naive 'no-change' baseline RMSE "
-        f"{money(naive.get('RMSE'))} · trained on {data_info.get('total_bars'):,} candles "
-        f"({data_info.get('period_start', '')[:16]} → {data_info.get('period_end', '')[:16]} UTC) "
-        f"in {training.get('training_seconds', 0):.1f}s on {training.get('device')}."
-    )
+    st.write("")
+    left, right = st.columns([2, 3], gap="large")
+    with left:
+        panel_title("Test vs validation vs naive baseline")
+        val = (m.get("validation") or {}).get("price_space", {})
 
-    with st.expander("Validation split and full metric report"):
-        val = (metrics.get("validation") or {}).get("price_space", {})
-        def fmt(value, digits=4):
-            return "n/a" if value is None else f"{value:,.{digits}f}"
+        def f(v, d=4):
+            return "n/a" if v is None else f"{v:,.{d}f}"
 
         render_table(pd.DataFrame({
             "metric": ["MAE (USDT)", "MSE", "RMSE (USDT)", "MAPE %", "R²"],
-            "test": [fmt(price.get("MAE"), 2), fmt(price.get("MSE"), 1),
-                     fmt(price.get("RMSE"), 2), fmt(price.get("MAPE"), 4),
-                     fmt(price.get("R2"), 4)],
-            "validation": [fmt(val.get("MAE"), 2), fmt(val.get("MSE"), 1),
-                           fmt(val.get("RMSE"), 2), fmt(val.get("MAPE"), 4),
-                           fmt(val.get("R2"), 4)],
-            "naive baseline (test)": [fmt(naive.get("MAE"), 2), fmt(naive.get("MSE"), 1),
-                                      fmt(naive.get("RMSE"), 2), fmt(naive.get("MAPE"), 4),
-                                      fmt(naive.get("R2"), 4)],
+            "test": [f(price.get("MAE"), 2), f(price.get("MSE"), 1), f(price.get("RMSE"), 2),
+                     f(price.get("MAPE")), f(price.get("R2"))],
+            "validation": [f(val.get("MAE"), 2), f(val.get("MSE"), 1), f(val.get("RMSE"), 2),
+                           f(val.get("MAPE")), f(val.get("R2"))],
+            "naive": [f(naive.get("MAE"), 2), f(naive.get("MSE"), 1), f(naive.get("RMSE"), 2),
+                      f(naive.get("MAPE")), f(naive.get("R2"))],
         }))
-        st.json(metrics, expanded=False)
+        with st.expander("Full metrics.json"):
+            st.json(m, expanded=False)
+    with right:
+        panel_title("Model")
+        render_table(pd.DataFrame({
+            "setting": ["Input", "Architecture", "Target", "Data", "Split", "Training"],
+            "value": [
+                f"last {m.get('sequence_length')} candles × {len(m.get('features', []))} features",
+                "LSTM 2 × 96 → Linear 32 → 1",
+                "next-candle log return → price = close × exp(r)",
+                f"{info.get('period_start', '')[:16]} → {info.get('period_end', '')[:16]} UTC",
+                f"{info.get('train_sequences', 0):,} / {info.get('val_sequences', 0):,} / "
+                f"{info.get('test_sequences', 0):,} sequences",
+                f"{tr.get('epochs_run')} epochs · early stopping · Adam",
+            ],
+        }))
 
-    st.subheader("Training and evaluation plots")
-    plots = [
-        ("1_historical_prices.png", "Historical data used for training"),
-        ("2_loss_curves.png", "Training and validation loss"),
-        ("3_actual_vs_predicted.png", "Actual vs predicted price (test split)"),
-        ("4_prediction_scatter.png", "Predicted vs actual scatter"),
-        ("5_error_distribution.png", "Error distribution"),
-    ]
-    available = [(MODELS_DIR / "plots" / name, caption)
-                 for name, caption in plots if (MODELS_DIR / "plots" / name).exists()]
-    if not available:
-        st.info("No plots found. Run the training script to generate them.")
+    st.write("")
+    panel_title("Training and evaluation plots")
+    plots = [("3_actual_vs_predicted.png", "Actual vs predicted · test split"),
+             ("2_loss_curves.png", "Training and validation loss"),
+             ("4_prediction_scatter.png", "Predicted vs actual"),
+             ("5_error_distribution.png", "Error distribution"),
+             ("1_historical_prices.png", "Historical data used for training")]
+    found = [(MODELS_DIR / "plots" / n, c) for n, c in plots if (MODELS_DIR / "plots" / n).exists()]
+    if not found:
+        st.info("No plots found. Run python train_model.py to generate them.")
         return
-    for index in range(0, len(available), 2):
-        cols = st.columns(2)
-        for col, (path, caption) in zip(cols, available[index:index + 2]):
-            col.image(str(path), caption=caption, width="stretch")
+    for i in range(0, len(found), 2):
+        for col, (p, cap) in zip(st.columns(2), found[i:i + 2]):
+            col.image(str(p), caption=cap, width="stretch")
 
 
 # --------------------------------------------------------------------------
-# Chatbot section
+# Chat tab
 # --------------------------------------------------------------------------
 def chatbot_section() -> None:
-    st.subheader("Transformer chatbot")
-    st.caption("The chatbot reads the same live snapshot as the dashboard. The numbers are "
-               "computed in Python and handed to the Transformer, which writes the answer.")
+    st.session_state.setdefault("chat_history", [])
+    st.session_state.setdefault("pending_question", None)
 
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-    if "pending_question" not in st.session_state:
-        st.session_state.pending_question = None
-
-    suggestions = api_get("/api/chat/suggestions", timeout=8)
-    if suggestions["ok"]:
-        options = suggestions["data"].get("suggestions", [])
-        st.write("Try one of these:")
-        for row_start in range(0, len(options), 2):
-            cols = st.columns(2)
-            for col, question in zip(cols, options[row_start:row_start + 2]):
-                if col.button(question, key=f"sugg_{question}", width="stretch"):
-                    st.session_state.pending_question = question
+    panel_title("Transformer chatbot · grounded in the live snapshot")
+    sugg = api_get("/api/chat/suggestions", timeout=8)
+    if sugg["ok"]:
+        options = sugg["data"].get("suggestions", [])
+        for i in range(0, len(options), 4):
+            for col, q in zip(st.columns(4), options[i:i + 4]):
+                if col.button(q, key=f"sugg_{q}", width="stretch"):
+                    st.session_state.pending_question = q
 
     for turn in st.session_state.chat_history:
         with st.chat_message(turn["role"]):
@@ -379,13 +413,11 @@ def chatbot_section() -> None:
                 st.caption(turn["meta"])
             if turn.get("facts"):
                 with st.expander("Verified data given to the Transformer"):
-                    st.markdown(f"<div class='fact-box'>{turn['facts']}</div>",
-                                unsafe_allow_html=True)
+                    st.markdown(f'<div class="fact">{turn["facts"]}</div>', unsafe_allow_html=True)
 
     typed = st.chat_input("Ask about the price, the forecast, the trend or the model ...")
     question = typed or st.session_state.pending_question
     st.session_state.pending_question = None
-
     if not question:
         return
 
@@ -394,34 +426,26 @@ def chatbot_section() -> None:
         st.markdown(question)
 
     with st.chat_message("assistant"):
-        with st.spinner("The Transformer is reading the live data ..."):
-            payload = {
+        with st.spinner("Reading the live data ..."):
+            r = api_post("/api/chat", {
                 "question": question,
                 "history": [{"role": t["role"], "content": t["content"]}
                             for t in st.session_state.chat_history[-8:-1]],
-            }
-            result = api_post("/api/chat", payload, timeout=240)
-
-        if not result["ok"]:
-            message = f"⚠️ {result['message']}"
-            st.error(message)
-            st.session_state.chat_history.append({"role": "assistant", "content": message})
+            }, timeout=240)
+        if not r["ok"]:
+            st.error(r["message"])
+            st.session_state.chat_history.append({"role": "assistant", "content": r["message"]})
             return
-
-        data = result["data"]
-        answer = data.get("answer", "No answer returned.")
-        meta = (f"intent: {data.get('intent')} · engine: {data.get('engine')} · "
-                f"{data.get('timestamp')} UTC")
+        d = r["data"]
+        answer = d.get("answer", "No answer returned.")
+        meta = f"{d.get('intent')} · {d.get('engine')} · {d.get('timestamp')} UTC"
         st.markdown(answer)
         st.caption(meta)
         with st.expander("Verified data given to the Transformer"):
-            st.markdown(f"<div class='fact-box'>{data.get('grounded_facts', '')}</div>",
+            st.markdown(f'<div class="fact">{d.get("grounded_facts", "")}</div>',
                         unsafe_allow_html=True)
-
-        st.session_state.chat_history.append({
-            "role": "assistant", "content": answer,
-            "meta": meta, "facts": data.get("grounded_facts", ""),
-        })
+        st.session_state.chat_history.append({"role": "assistant", "content": answer,
+                                              "meta": meta, "facts": d.get("grounded_facts", "")})
 
     if st.button("Clear conversation"):
         st.session_state.chat_history = []
@@ -429,19 +453,29 @@ def chatbot_section() -> None:
 
 
 # --------------------------------------------------------------------------
+def about_section() -> None:
+    st.markdown(f"""
+**Pipeline** · Binance public API → FastAPI (polls every {POLL_INTERVAL_SECONDS} s) → 7 stationary
+features → LSTM → forecast 60 s ahead → this dashboard + a Transformer chatbot.
+
+**Model** · a 2-layer LSTM (96 units) reads the last 60 one-minute candles and predicts the log
+return of the next candle, converted back to a price with `close × exp(r)`. Every forecast is
+stored and scored one minute later against the real close, which produces the live MAE, RMSE
+and directional accuracy on the first tab.
+
+**Chatbot** · the exact numbers are computed in Python and handed to a Transformer that only
+phrases the answer; anything it says that contradicts the data is rejected.
+
+**Errors** · retries with back-off, four Binance mirrors, Coinbase and Kraken as fallbacks, and a
+structured message instead of a traceback at every layer.
+
+API docs: [{BACKEND_URL}/docs]({BACKEND_URL}/docs)
+""")
+
+
 def main() -> None:
-    st.title("📈 Real-Time AI Prediction System")
-    st.markdown(
-        f"**{ASSET_NAME} ({SYMBOL})** · live data from the Binance public API every "
-        f"**{POLL_INTERVAL_SECONDS} seconds** · **LSTM** forecast for the next **60 seconds** · "
-        f"**Transformer** chatbot grounded in the live numbers."
-    )
-
     render_sidebar()
-
-    tab_live, tab_model, tab_chat, tab_about = st.tabs(
-        ["🔴 Live monitor", "🧠 Model evaluation", "💬 Chatbot", "ℹ️ About"]
-    )
+    tab_live, tab_model, tab_chat, tab_about = st.tabs(["Live", "Model", "Chat", "About"])
     with tab_live:
         live_section()
     with tab_model:
@@ -449,38 +483,7 @@ def main() -> None:
     with tab_chat:
         chatbot_section()
     with tab_about:
-        st.markdown(f"""
-### What this system does
-
-1. **External API** - the backend calls the Binance public REST API
-   (`/api/v3/klines` and `/api/v3/ticker/24hr`) for **{SYMBOL}**. No API key is needed.
-2. **Real time** - a background task polls that API every **{POLL_INTERVAL_SECONDS} seconds**.
-   Every response is merged into a rolling buffer of 1-minute candles.
-3. **Data processing** - each candle is turned into 7 stationary features:
-   log return, two moving-average ratios, rolling volatility, RSI, intrabar range
-   and a volume z-score.
-4. **LSTM** - a 2-layer LSTM (96 hidden units) reads the last **60 candles** and predicts the
-   **log return of the next minute**, which is converted back to a price:
-   `predicted_price = current_price × exp(predicted_log_return)`.
-5. **Prediction** - every forecast is stored. One minute later the real close price arrives and
-   the forecast is scored, which produces the live MAE, RMSE and directional accuracy you see
-   on the Live monitor tab.
-6. **Transformer chatbot** - the exact numbers are computed in Python and passed to a
-   Transformer language model, which phrases the answer. The model is never asked to
-   remember or invent a price.
-
-### Error handling
-
-If the external API is unreachable the backend retries with exponential back-off, moves to a
-Binance mirror, and finally falls back to Coinbase and Kraken for the live price. Every
-endpoint returns a structured message rather than a traceback, and the dashboard shows a
-warning while keeping the last known values on screen.
-
-### Documentation
-
-The interactive API documentation is available at
-[{BACKEND_URL}/docs]({BACKEND_URL}/docs).
-        """)
+        about_section()
 
 
 if __name__ == "__main__":
