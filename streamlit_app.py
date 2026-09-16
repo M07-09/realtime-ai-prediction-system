@@ -255,9 +255,9 @@ def live_section() -> None:
     frame = st.segmented_control("Timeframe", list(TIMEFRAMES), default="4H", required=True,
                                  key="timeframe", label_visibility="collapsed")
     interval, limit = TIMEFRAMES[frame]
-    if interval == "1m":                      # the live buffer already holds these
+    if interval == "1m" and len(history) >= limit:   # the live buffer already holds these
         bars, problem = history[-limit:], ""
-    else:
+    else:                                            # fetched on demand, cached 30 s
         r = api_get("/api/candles", {"interval": interval, "limit": limit}, timeout=20)
         bars = r["data"].get("bars", []) if r["ok"] else []
         problem = "" if r["ok"] else r["message"]

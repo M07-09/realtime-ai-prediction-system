@@ -106,7 +106,12 @@ def candlestick_chart(bars: List[Dict[str, Any]]) -> go.Figure:
     )
 
     _base_layout(fig, 560)
-    fig.update_layout(xaxis_rangeslider_visible=False)
+    # Plotly stretches each candle to fill its x-slot, so 60 candles come out fat
+    # and 6 come out huge. Candlesticks obey the box layout gap, so widen the gap
+    # as the count drops to keep the body near 8 px on a ~1200 px plot.
+    slot_px = 1200 / max(len(df), 1)
+    fig.update_layout(xaxis_rangeslider_visible=False,
+                      boxgap=min(0.9, max(0.2, 1 - 8 / slot_px)))
     fig.update_yaxes(tickprefix="$", tickformat=",.0f", row=1, col=1)
     fig.update_yaxes(tickformat=".2s", row=2, col=1, showgrid=False)
     fig.update_xaxes(showticklabels=False, row=1, col=1)
