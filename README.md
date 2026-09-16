@@ -19,7 +19,7 @@ from a Streamlit dashboard.
 | **What does the model predict?** | Given the **last 60 candles**, it predicts the **log return of the next candle**, converted back to a price: `price × exp(return)`. Horizon: **60 seconds**. |
 | **How does it work?** | `Binance API → FastAPI (polls every 10s) → features → LSTM → prediction → Streamlit + chatbot` |
 | **What are the results?** | On a held-out test split: **MAE $29.65**, **RMSE $43.14**, **MAPE 0.0386%**, **R² 0.9986**. It ties a naive baseline on direction, and [the README says so honestly](#8-honest-limitations). |
-| **How do I run it?** | `pip install -r requirements.txt` → `python train_model.py` → start the backend and the dashboard (two commands, below) |
+| **How do I run it?** | `pip install -r requirements.txt` → `python run.py` |
 
 ---
 
@@ -64,20 +64,23 @@ pip install torch --index-url https://download.pytorch.org/whl/cu130   # GPU
 # pip install torch --index-url https://download.pytorch.org/whl/cpu   # CPU only
 pip install -r requirements.txt
 
-# 2. download the data and train the model  (~1 minute, one command)
-python train_model.py
-
-# 3. terminal 1 - the backend
-python -m app.main
-
-# 4. terminal 2 - the dashboard
-python -m streamlit run streamlit_app.py
+# 2. run everything
+python run.py
 ```
 
-Then open:
+`run.py` trains the model on the first run (about a minute), starts the backend and the
+dashboard, and opens http://localhost:8501. Ctrl+C stops both.
 
 - **Dashboard** → http://localhost:8501
 - **API docs** → http://127.0.0.1:8000/docs
+
+To run the pieces separately:
+
+```bash
+python train_model.py                          # download data + train + evaluate
+python -m app.main                             # backend only
+python -m streamlit run streamlit_app.py       # dashboard only
+```
 
 The first forecast appears within 10 seconds. The live actual-vs-predicted chart needs about two
 minutes, because a forecast can only be scored once the minute it refers to has closed.
@@ -88,7 +91,8 @@ minutes, because a forecast can only be scored once the minute it refers to has 
 
 ```
 RealTime_Crypto_AI_System/
-├── train_model.py          ← download + train + evaluate + plots   (one command)
+├── run.py                  ← start everything with one command
+├── train_model.py          ← download + train + evaluate + plots
 ├── streamlit_app.py        ← the dashboard
 ├── test_system.py          ← 61 checks
 ├── make_diagram.py         ← regenerates the architecture image above
