@@ -1,0 +1,87 @@
+{
+  "symbol": "BTCUSDT",
+  "interval": "1m",
+  "sequence_length": 60,
+  "forecast_horizon_seconds": 60,
+  "features": [
+    "log_return",
+    "ma_ratio_5",
+    "ma_ratio_15",
+    "volatility_15",
+    "rsi_14",
+    "range_pct",
+    "volume_z"
+  ],
+  "target": "next-candle log return, reconstructed to a price",
+  "trained_at": "2026-09-16T16:26:03.219903+00:00",
+  "data": {
+    "total_bars": 20000,
+    "usable_rows": 19984,
+    "period_start": "2026-09-02 18:10:00+00:00",
+    "period_end": "2026-09-16 15:29:00+00:00",
+    "train_sequences": 13929,
+    "val_sequences": 2939,
+    "test_sequences": 2939
+  },
+  "training": {
+    "device": "cuda",
+    "epochs_run": 14,
+    "training_seconds": 10.569611549377441,
+    "best_val_loss": 0.4187357516141115,
+    "parameters": 117953
+  },
+  "test": {
+    "split": "test",
+    "samples": 2939,
+    "price_space": {
+      "MAE": 29.65116856176443,
+      "MSE": 1861.043608186513,
+      "RMSE": 43.139814651740366,
+      "MAPE": 0.03861019497742734,
+      "R2": 0.9986397718812828
+    },
+    "naive_baseline_price_space": {
+      "MAE": 29.64808438244301,
+      "MSE": 1860.362240966325,
+      "RMSE": 43.13191673188574,
+      "MAPE": 0.03860638523848341,
+      "R2": 0.9986402698894155
+    },
+    "return_space": {
+      "MAE": 0.0003861000842167354,
+      "MSE": 3.1661741240173573e-07,
+      "RMSE": 0.0005626876686064266,
+      "MAPE": 136.57331663598717,
+      "R2": -0.0008937414817611344
+    },
+    "directional_accuracy_pct": 49.81286151752297,
+    "improvement_vs_naive_rmse_pct": -0.01831108017694289
+  },
+  "validation": {
+    "split": "val",
+    "samples": 2939,
+    "price_space": {
+      "MAE": 14.56066658995485,
+      "MSE": 568.9906672778723,
+      "RMSE": 23.853525258918697,
+      "MAPE": 0.018833752431265963,
+      "R2": 0.9948415728705192
+    },
+    "naive_baseline_price_space": {
+      "MAE": 14.524028581149956,
+      "MSE": 569.0474113644087,
+      "RMSE": 23.85471465694798,
+      "MAPE": 0.018786358596068583,
+      "R2": 0.9948410584328452
+    },
+    "return_space": {
+      "MAE": 0.00018833869305752348,
+      "MSE": 9.511755847759125e-08,
+      "RMSE": 0.00030841134622058126,
+      "MAPE": 307.015948927227,
+      "R2": -1.2250313897954612e-05
+    },
+    "directional_accuracy_pct": 45.62776454576387,
+    "improvement_vs_naive_rmse_pct": 0.004986008201678918
+  }
+}
