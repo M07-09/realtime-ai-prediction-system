@@ -1,0 +1,31 @@
+# ---------------------------------------------------------------------------
+# Real-Time AI Prediction System - Python dependencies
+#
+# PyTorch: install the build that matches your machine FIRST.
+#   GPU (CUDA 13):  pip install torch --index-url https://download.pytorch.org/whl/cu130
+#   CPU only:       pip install torch --index-url https://download.pytorch.org/whl/cpu
+# Then:             pip install -r requirements.txt
+# ---------------------------------------------------------------------------
+
+# Deep learning
+torch>=2.2
+transformers>=4.45
+accelerate>=0.30
+safetensors>=0.4
+
+# Backend
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+
+# Dashboard
+streamlit>=1.33
+plotly>=5.20
+
+# Data and HTTP
+pandas>=2.0
+numpy>=1.26
+requests>=2.31
+
+# Plots produced by the training script
+matplotlib>=3.8
