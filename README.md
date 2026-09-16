@@ -80,7 +80,7 @@ Without the batch file, in two terminals:
 
 ```bash
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-streamlit run streamlit_app.py
+python -m streamlit run streamlit_app.py
 ```
 
 The first forecast appears within 10 seconds. The live actual-vs-predicted chart needs about two

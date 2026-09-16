@@ -139,7 +139,7 @@ def render_sidebar() -> None:
         )
 
         st.divider()
-        if st.button("Force refresh now", use_container_width=True):
+        if st.button("Force refresh now", width="stretch"):
             result = api_post("/api/refresh", {}, timeout=30)
             if result["ok"]:
                 st.success("Polled the external API")
@@ -212,7 +212,7 @@ def live_section() -> None:
     # ------------------------------------------------------------- charts
     history = status.get("history", [])
     if history:
-        st.plotly_chart(price_chart(history, prediction), use_container_width=True,
+        st.plotly_chart(price_chart(history, prediction), width="stretch",
                         key=f"price_{collector.get('poll_count')}")
     else:
         st.info("Waiting for the first candles ...")
@@ -223,15 +223,15 @@ def live_section() -> None:
     live_eval = status.get("live_evaluation", {})
     with left:
         if resolved:
-            st.plotly_chart(actual_vs_predicted_chart(resolved), use_container_width=True,
+            st.plotly_chart(actual_vs_predicted_chart(resolved), width="stretch",
                             key=f"avp_{collector.get('poll_count')}")
-            st.plotly_chart(error_chart(resolved), use_container_width=True,
+            st.plotly_chart(error_chart(resolved), width="stretch",
                             key=f"err_{collector.get('poll_count')}")
         else:
             st.info(f"⏳ {live_eval.get('message', 'Scoring starts once a forecast matures.')}")
             ticks = status.get("ticks", [])
             if ticks:
-                st.plotly_chart(tick_chart(ticks), use_container_width=True,
+                st.plotly_chart(tick_chart(ticks), width="stretch",
                                 key=f"tick_{collector.get('poll_count')}")
 
     with right:
@@ -346,7 +346,7 @@ def model_section() -> None:
     for index in range(0, len(available), 2):
         cols = st.columns(2)
         for col, (path, caption) in zip(cols, available[index:index + 2]):
-            col.image(str(path), caption=caption, use_container_width=True)
+            col.image(str(path), caption=caption, width="stretch")
 
 
 # --------------------------------------------------------------------------
@@ -369,7 +369,7 @@ def chatbot_section() -> None:
         for row_start in range(0, len(options), 2):
             cols = st.columns(2)
             for col, question in zip(cols, options[row_start:row_start + 2]):
-                if col.button(question, key=f"sugg_{question}", use_container_width=True):
+                if col.button(question, key=f"sugg_{question}", width="stretch"):
                     st.session_state.pending_question = question
 
     for turn in st.session_state.chat_history:

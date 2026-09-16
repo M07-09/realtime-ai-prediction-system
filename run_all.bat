@@ -17,6 +17,6 @@ timeout /t 8 /nobreak >nul
 
 echo.
 echo  [3/3] Starting the Streamlit dashboard on http://localhost:8501 ...
-streamlit run streamlit_app.py
+python -m streamlit run streamlit_app.py
 
 pause
