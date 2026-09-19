@@ -17,7 +17,6 @@ import pandas as pd
 import torch
 
 from app.config import (
-    CHATBOT_DEVICE,
     FEATURE_COLUMNS,
     FORECAST_HORIZON,
     INTERVAL_SECONDS,
@@ -62,7 +61,7 @@ class Prediction:
 class LSTMPredictor:
     """Thread-safe-enough wrapper (single writer) around the trained network."""
 
-    def __init__(self, device_preference: str = CHATBOT_DEVICE) -> None:
+    def __init__(self, device_preference: str = "auto") -> None:
         self.model: Optional[PriceLSTM] = None
         self.scaler: Optional[StandardScaler] = None
         self.device = pick_device(device_preference)
@@ -75,7 +74,7 @@ class LSTMPredictor:
     def _load(self) -> None:
         if not MODEL_PATH.exists() or not SCALER_PATH.exists():
             self.load_error = (
-                "Trained model not found. Run:  python -m train_model"
+                "Trained model not found. Run:  python train_model.py"
             )
             log.warning(self.load_error)
             return

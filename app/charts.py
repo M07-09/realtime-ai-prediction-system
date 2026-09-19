@@ -118,8 +118,24 @@ def candlestick_chart(bars: List[Dict[str, Any]]) -> go.Figure:
     return fig
 
 
-def actual_vs_predicted_chart(records: List[Dict[str, Any]]) -> go.Figure:
-    """Each matured forecast against the price that really occurred."""
+def _add_latest_forecast(fig: go.Figure, latest: Optional[Dict[str, Any]],
+                         anchor_x: Any, anchor_y: float) -> None:
+    """Draw the forecast that has not matured yet, one minute ahead of the last point."""
+    if not latest or not latest.get("available"):
+        return
+    target = pd.to_datetime(latest["target_time"], utc=True)
+    predicted = float(latest["predicted_price"])
+    fig.add_trace(go.Scatter(
+        x=[anchor_x, target], y=[anchor_y, predicted], name="Next forecast",
+        mode="lines+markers", line=dict(color=ACCENT_2, width=1.4, dash="dot"),
+        marker=dict(size=[0, 9], color=ACCENT_2, line=dict(color=BG, width=1.5)),
+        hovertemplate="next forecast %{y:$,.2f}<extra></extra>",
+    ))
+
+
+def actual_vs_predicted_chart(records: List[Dict[str, Any]],
+                              latest: Optional[Dict[str, Any]] = None) -> go.Figure:
+    """Matured forecasts against the real price, plus the forecast still pending."""
     df = pd.DataFrame(records)
     df["target_time"] = pd.to_datetime(df["target_time"], utc=True)
 
@@ -131,6 +147,8 @@ def actual_vs_predicted_chart(records: List[Dict[str, Any]]) -> go.Figure:
                              mode="lines+markers",
                              line=dict(color=ACCENT_2, width=1.8, dash="dot"),
                              marker=dict(size=5, symbol="diamond")))
+    _add_latest_forecast(fig, latest, df["target_time"].iloc[-1],
+                         float(df["actual_price"].iloc[-1]))
     _base_layout(fig, 300)
     fig.update_layout(showlegend=True,
                       legend=dict(orientation="h", y=1.08, x=0, bgcolor="rgba(0,0,0,0)"))
@@ -150,11 +168,14 @@ def error_chart(records: List[Dict[str, Any]]) -> go.Figure:
     return fig
 
 
-def tick_chart(ticks: List[Dict[str, Any]]) -> go.Figure:
+def tick_chart(ticks: List[Dict[str, Any]],
+               latest: Optional[Dict[str, Any]] = None) -> go.Figure:
     df = pd.DataFrame(ticks)
     df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
     fig = go.Figure(go.Scatter(x=df["timestamp"], y=df["price"], mode="lines+markers",
-                               line=dict(color=ACCENT, width=1.6), marker=dict(size=4)))
+                               name="Live price", line=dict(color=ACCENT, width=1.6),
+                               marker=dict(size=4)))
+    _add_latest_forecast(fig, latest, df["timestamp"].iloc[-1], float(df["price"].iloc[-1]))
     _base_layout(fig, 300)
     fig.update_yaxes(tickprefix="$", tickformat=",.0f")
     return fig

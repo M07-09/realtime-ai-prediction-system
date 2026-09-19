@@ -118,7 +118,7 @@ def test_scaler() -> None:
 def test_model(bars: pd.DataFrame) -> None:
     section("4. Trained LSTM")
     if not MODEL_PATH.exists():
-        check("model file exists", False, "run  python -m train_model")
+        check("model file exists", False, "run  python train_model.py")
         return
 
     from app.predictor import get_predictor

@@ -109,15 +109,15 @@ RealTime_Crypto_AI_System/
 │   ├── chatbot.py          the Transformer: the part that SPEAKS
 │   ├── charts.py           every chart and table
 │   ├── schemas.py          API request/response models
-│   └── main.py             FastAPI app, 15 endpoints
+│   └── main.py             FastAPI app, 16 endpoints
 │
 ├── models/                 trained model, scaler, metrics.json, plots
 ├── data/                   downloaded candles + live stream log
 └── logs/                   api, backend, collector, training, chatbot
 ```
 
-Every module is small enough to read in one sitting: the largest is the dashboard page at about
-400 lines, and most sit between 100 and 330.
+Every module is small enough to read in one sitting: nothing under `app/` passes about 340 lines,
+and the dashboard page is the largest file at about 510.
 
 ---
 
@@ -280,7 +280,8 @@ A dark trading-terminal layout with four tabs:
 
 - **Live** — price, forecast, 24h change, trend and data freshness as cards; a plain
   candlestick-and-volume chart with 1H / 4H / 1D / 1W / 1M / 1Y ranges (longer ranges use bigger
-  candles, fetched on demand); forecast-vs-reality and error charts for the running session;
+  candles, fetched on demand); forecast-vs-reality and error charts for the running session, with
+  the pending forecast drawn one minute ahead;
   live scoring; window statistics; and the raw candles received from the API.
 - **Model** — the five offline metrics, the naive baseline, the model configuration and every
   training plot.
@@ -370,7 +371,7 @@ python test_system.py
 61 checks across eight areas: the external API, feature engineering (including an explicit
 look-ahead-leakage check), the scaler round-trip, the trained model, error handling on empty,
 short and malformed input, the prediction ledger's scoring arithmetic, chatbot intent detection,
-grounding and the answer-verification guard, and every backend endpoint.
+grounding and the answer-verification guard, and the main read endpoints of the backend.
 
 ```
 ====================================================================

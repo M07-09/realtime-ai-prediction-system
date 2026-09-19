@@ -275,7 +275,7 @@ def live_section() -> None:
     with left:
         panel_title("Forecast vs reality · live session")
         if resolved:
-            st.plotly_chart(actual_vs_predicted_chart(resolved), width="stretch",
+            st.plotly_chart(actual_vs_predicted_chart(resolved, pred), width="stretch",
                             key=f"avp_{key}", config={"displayModeBar": False})
             panel_title("Error per forecast · green = direction correct")
             st.plotly_chart(error_chart(resolved), width="stretch", key=f"err_{key}",
@@ -286,7 +286,7 @@ def live_section() -> None:
             ticks = s.get("ticks", [])
             if ticks:
                 panel_title(f"Real-time stream · one point per API call ({POLL_INTERVAL_SECONDS} s)")
-                st.plotly_chart(tick_chart(ticks), width="stretch", key=f"tick_{key}",
+                st.plotly_chart(tick_chart(ticks, pred), width="stretch", key=f"tick_{key}",
                                 config={"displayModeBar": False})
 
     with right:

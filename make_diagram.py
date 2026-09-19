@@ -24,7 +24,7 @@ BOXES = [
     # x, y, w, h, title, subtitle, fill, edge
     (0.4, 5.05, 2.5, 1.25, "External API", "Binance public REST\n/klines · /ticker/24hr\nno API key",
      "#eff6ff", "#3b82f6"),
-    (3.5, 5.05, 2.5, 1.25, "FastAPI backend", "polls every 10 s\n15 endpoints\nretries · fallbacks",
+    (3.5, 5.05, 2.5, 1.25, "FastAPI backend", "polls every 10 s\n16 endpoints\nretries · fallbacks",
      "#f0fdf4", "#22c55e"),
     (6.6, 5.05, 2.5, 1.25, "Data processing", "7 stationary features\nrolling 720-candle buffer\nz-score scaler",
      "#fefce8", "#eab308"),
@@ -32,7 +32,7 @@ BOXES = [
      "#fdf2f8", "#ec4899"),
     (3.5, 2.95, 2.5, 1.25, "Prediction", "price in +60 s\nscored 1 min later\nlive MAE / RMSE",
      "#f5f3ff", "#8b5cf6"),
-    (0.4, 2.95, 2.5, 1.25, "Streamlit dashboard", "4 tabs · 7 charts\nauto-refresh 10 s",
+    (0.4, 2.95, 2.5, 1.25, "Streamlit dashboard", "4 tabs · 1H to 1Y charts\nauto-refresh 10 s",
      "#ecfeff", "#06b6d4"),
     (3.5, 0.85, 2.5, 1.25, "Transformer chatbot", "Qwen2.5-0.5B\ngrounded in live data\nanswers verified",
      "#fff7ed", "#f97316"),

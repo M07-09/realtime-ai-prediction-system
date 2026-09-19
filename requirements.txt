@@ -9,7 +9,7 @@
 
 # Deep learning
 torch>=2.2
-transformers>=4.45
+transformers>=4.56      # the `dtype` argument used by the chatbot
 accelerate>=0.30
 safetensors>=0.4
 
@@ -19,7 +19,7 @@ uvicorn[standard]>=0.29
 pydantic>=2.6
 
 # Dashboard
-streamlit>=1.33
+streamlit>=1.62         # width="stretch", segmented_control(required=)
 plotly>=5.20
 
 # Data and HTTP
