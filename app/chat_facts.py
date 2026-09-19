@@ -190,7 +190,9 @@ def deterministic_answer(context: Dict[str, Any], intent: str) -> str:
                          f"RMSE {_fmt(test.get('RMSE'))} USDT, MAPE {_fmt(test.get('MAPE'), 4)}% "
                          f"and R2 {_fmt(test.get('R2'), 4)}.")
         if live_eval.get("available"):
-            parts.append(f"In this live session {live_eval.get('resolved')} forecasts have matured "
+            n = live_eval.get("resolved")
+            matured = "1 forecast has" if n == 1 else f"{n} forecasts have"
+            parts.append(f"In this live session {matured} matured "
                          f"with MAE {_fmt(live_eval.get('MAE'))} USDT and "
                          f"{_fmt(live_eval.get('directional_accuracy_pct'), 1)}% correct direction.")
         return " ".join(parts) if parts else "No evaluation results are available yet."
