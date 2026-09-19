@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from app.chat_facts import (
+    STRICT_INTENTS,
     SUGGESTED_QUESTIONS,
     build_data_block,
     detect_intent,
@@ -178,7 +179,10 @@ class TransformerChatbot:
                 })
                 generated = self._generate(messages)
                 if generated and len(generated) > 3:
-                    ok, reason = verify_answer(generated, data_block, context)
+                    ok, reason = verify_answer(
+                        generated, data_block, context,
+                        required_from=fallback if intent in STRICT_INTENTS else None,
+                    )
                     if ok:
                         answer = generated
                         engine = f"{self.model_name} on {self.device}"

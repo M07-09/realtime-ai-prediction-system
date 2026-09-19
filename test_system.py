@@ -290,6 +290,22 @@ def test_chatbot() -> None:
                           block, down_context)
     check("an ambiguous phrasing is accepted rather than wrongly rejected", ok)
 
+    # A list of metrics must keep every figure: this exact reply came from the
+    # Transformer and claimed MAE, RMSE and R2 were all 25.92.
+    metrics_block = ("offline_test_MAE_usdt: 29.65\noffline_test_RMSE_usdt: 43.14\n"
+                     "offline_test_R2: 0.9986\nlive_session_MAE_usdt: 25.92\n"
+                     "live_directional_accuracy_pct: 100.00")
+    verified = ("On the held-out test split the LSTM scores MAE 29.65 USDT, RMSE 43.14 USDT "
+                "and R2 0.9986. Live: MAE 25.92 USDT and 100.0% correct direction.")
+    ok, reason = verify_answer("The LSTM model is highly accurate, with a 100% correct direction "
+                               "and a 25.92 USDT MAE, RMSE, and R2 score.",
+                               metrics_block, context, required_from=verified)
+    check("a metrics answer that drops figures is rejected", not ok, reason)
+    ok, _ = verify_answer("Offline the LSTM reaches MAE 29.65 USDT, RMSE 43.14 USDT and R2 0.9986; "
+                          "live it shows MAE 25.92 USDT with 100.0% of directions right.",
+                          metrics_block, context, required_from=verified)
+    check("a metrics answer that keeps every figure is accepted", ok)
+
 
 def test_backend() -> None:
     section("8. Backend endpoints (skipped if the server is not running)")

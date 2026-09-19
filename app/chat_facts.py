@@ -285,15 +285,23 @@ def _forecast_direction_claim(answer: str) -> Optional[int]:
     return None
 
 
-def verify_answer(answer: str, data_block: str, context: Dict[str, Any]) -> Tuple[bool, str]:
+# Intents whose answer is a list of figures. Dropping one of them lets the rest
+# be misread: "25.92 USDT MAE, RMSE and R2" passes check 1 yet is false.
+STRICT_INTENTS = {"accuracy", "statistics"}
+
+
+def verify_answer(answer: str, data_block: str, context: Dict[str, Any],
+                  required_from: Optional[str] = None) -> Tuple[bool, str]:
     """
     Reject a generated answer that contradicts the verified data.
 
-    Two independent checks:
+    Three independent checks:
       1. every number in the answer must appear in the DATA block, so the model
          cannot invent a price or a metric;
       2. any direction it attributes to the forecast must match the sign of the
-         LSTM's predicted change.
+         LSTM's predicted change;
+      3. when `required_from` is given, every number in it must survive the
+         rewrite, so no figure can be dropped and another passed off in its place.
     """
     allowed = set(_numbers_in(data_block))
     # Small integers are ordinary prose ("1 minute", "3 sentences"), not data.
@@ -313,6 +321,12 @@ def verify_answer(answer: str, data_block: str, context: Dict[str, Any]) -> Tupl
             return False, (f"said the forecast is "
                            f"{ {1: 'up', -1: 'down', 0: 'stable'}[claimed] } "
                            f"but the model says {prediction.get('direction')}")
+
+    if required_from:
+        present = set(_numbers_in(answer))
+        for number in _numbers_in(required_from):
+            if number not in present:
+                return False, f"dropped the figure {float(number):g}"
 
     return True, "ok"
 

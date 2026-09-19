@@ -94,7 +94,7 @@ RealTime_Crypto_AI_System/
 ├── run.py                  ← start everything with one command
 ├── train_model.py          ← download + train + evaluate + plots
 ├── streamlit_app.py        ← the dashboard
-├── test_system.py          ← 61 checks
+├── test_system.py          ← 63 checks
 ├── make_diagram.py         ← regenerates the architecture image above
 ├── .streamlit/config.toml  ← dashboard theme
 │
@@ -260,9 +260,11 @@ A language model cannot know the price of Bitcoin and will invent one if asked. 
    gives the same wording.
 4. **Verification** — before display, the generated text is checked:
    - every number in it must appear in the `DATA:` block, so it cannot invent a price;
-   - any direction it attributes to the *forecast* must match the model's own direction label.
+   - any direction it attributes to the *forecast* must match the model's own direction label;
+   - for answers that list figures (accuracy, statistics), every figure of the verified answer
+     must survive, so one number cannot be passed off as several metrics.
 
-   If either check fails, the deterministic answer is shown and the interface says why.
+   If any check fails, the deterministic answer is shown and the interface says why.
 
 That last step is not decorative. During testing the 0.5B model wrote *"the price is expected to
 go up"* while the forecast was flat. The guard caught it and the user saw the correct answer
@@ -368,14 +370,14 @@ order-book features and attention-based forecasters are the natural next steps.
 python test_system.py
 ```
 
-61 checks across eight areas: the external API, feature engineering (including an explicit
+63 checks across eight areas: the external API, feature engineering (including an explicit
 look-ahead-leakage check), the scaler round-trip, the trained model, error handling on empty,
 short and malformed input, the prediction ledger's scoring arithmetic, chatbot intent detection,
 grounding and the answer-verification guard, and the main read endpoints of the backend.
 
 ```
 ====================================================================
-  61 passed, 0 failed
+  63 passed, 0 failed
 ====================================================================
 ```
 
